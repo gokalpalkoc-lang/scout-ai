@@ -1,9 +1,6 @@
 import { Settings } from '../../store/settings';
-import { claudeAsk } from '../anthropic/agent';
-import { resolveAnthropicCredential } from '../anthropic/auth';
-import { quickAsk } from '../gemini/agent';
-import { resolveCredential } from '../gemini/auth';
-import { errorMessage, truncate } from '../util';
+import { askOnce } from '../ai/ask';
+import { truncate } from '../util';
 import { inferCapabilities } from './bridge';
 import { MODULE_API_REFERENCE } from './sandbox';
 import { Capability, Module } from './types';
@@ -157,40 +154,19 @@ export async function generateModule(
 ): Promise<{ ok: true; module: GeneratedModule } | { ok: false; error: string; problems?: string[] }> {
   const prompt = buildPrompt(args);
 
-  let text: string;
-  try {
-    if (args.settings.assistantProvider === 'claude') {
-      const resolved = await resolveAnthropicCredential();
-      if ('error' in resolved) return { ok: false, error: resolved.error };
-      text = await claudeAsk({
-        credential: resolved.credential,
-        model: args.settings.claudeModel,
-        system: SYSTEM,
-        prompt,
-        maxTokens: 24_000,
-        // Writing working code from a one-line brief benefits from the headroom.
-        effort: 'high',
-        signal: args.signal,
-      });
-    } else {
-      const resolved = await resolveCredential(args.settings);
-      if ('error' in resolved) return { ok: false, error: resolved.error };
-      text = await quickAsk({
-        credential: resolved.credential,
-        model: args.settings.chatModel,
-        system: SYSTEM,
-        prompt,
-        maxOutputTokens: 24_000,
-        signal: args.signal,
-      });
-    }
-  } catch (e) {
-    return { ok: false, error: errorMessage(e) };
-  }
+  const asked = await askOnce({
+    settings: args.settings,
+    system: SYSTEM,
+    prompt,
+    maxTokens: 24_000,
+    // Writing working code from a one-line brief benefits from the headroom.
+    effort: 'high',
+    signal: args.signal,
+  });
+  if (!asked.ok) return { ok: false, error: asked.error };
+  if (!asked.text.trim()) return { ok: false, error: 'The model returned nothing.' };
 
-  if (!text.trim()) return { ok: false, error: 'The model returned nothing.' };
-
-  const parsed = parseGeneratorOutput(text, args.existing?.name ?? 'New panel');
+  const parsed = parseGeneratorOutput(asked.text, args.existing?.name ?? 'New panel');
   const validation = validateFragment(parsed.fragment);
 
   if (!validation.ok) {

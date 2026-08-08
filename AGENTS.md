@@ -24,9 +24,10 @@ src/components/ui/   primitives (Text, Button, Card, Field, …)
 src/lib/
   db/                SQLite schema + one repository per table
   web/               fetch, HTML→text, JSON-LD, hashing, diffing
-  ai/                provider router + the contract both providers implement
+  ai/                provider router, shared contract/prompt/schema, rotation pool
   gemini/            auth, REST client, tool declarations (canonical), agent loop
   anthropic/         auth, Messages API client, schema conversion, agent loop
+  openai/            one Chat-Completions adapter for every free-tier backend
   extract/           page → structured events (prompts + validation)
   rules/             the rule DSL: types, validator, engine, generator
   modules/           generated panels: sandbox, capability bridge, generator
@@ -35,22 +36,46 @@ src/lib/
 src/store/           Zustand: settings (persisted) + app + chat
 ```
 
-## Two model providers
+## Three model providers
 
-The assistant runs on Gemini or Claude; page extraction always runs on Gemini
-(it fires on every check, and a cheap Flash model is the right tool for
-text → JSON).
+The assistant runs on Gemini, Claude, or a rotating pool of free tiers; page
+extraction always runs on Gemini (it fires on every check, and a cheap Flash
+model is the right tool for text → JSON).
 
+- **Everything shared lives in `src/lib/ai`**, and it is shared because it had
+  already started to drift between two providers: the system prompt
+  (`prompt.ts`), the Gemini-schema → JSON-Schema translation (`jsonSchema.ts`),
+  and the one-shot authoring call the rule and module generators make (`ask.ts`).
+  A fourth provider should add a wire layer, not another copy of these.
 - **Tool declarations live once**, in Gemini's OpenAPI-subset shape in
-  `src/lib/gemini/tools.ts`. `src/lib/anthropic/schema.ts` translates them to
-  JSON Schema. Never maintain two copies — they drift.
-- **The tool dispatcher is provider-neutral** (name + args → JSON), so both
+  `src/lib/gemini/tools.ts`. Never maintain two copies — they drift.
+- **The tool dispatcher is provider-neutral** (name + args → JSON), so all three
   agent loops drive the same 24 tools against the same database.
-- **The Anthropic path uses raw HTTP, not `@anthropic-ai/sdk`,** and that was
-  measured rather than assumed: the SDK imports `node:fs` through its credential
-  chain (Metro cannot resolve it) and its streaming reads
-  `response.body.getReader()`, which React Native's XHR-based `fetch` polyfill
-  does not provide. XHR `onprogress` is the only incremental transport here.
+- **No SDKs, only raw HTTP,** and that was measured rather than assumed:
+  `@anthropic-ai/sdk` imports `node:fs` through its credential chain (Metro
+  cannot resolve it) and its streaming reads `response.body.getReader()`, which
+  React Native's XHR-based `fetch` polyfill does not provide. XHR `onprogress` is
+  the only incremental transport here, and the same applies to `openai`.
+
+## The free model pool
+
+`src/lib/openai` is one Chat Completions client serving Groq, Cerebras,
+OpenRouter, Mistral, GitHub Models and any self-hosted server — adding a backend
+is a row in `catalog.ts`, not a module. `src/lib/ai/pool.ts` decides who answers.
+
+- **Quotas are learned, not configured.** Free tiers change their limits without
+  notice, so the only trustworthy signal is a 429 and its `Retry-After`. Do not
+  hardcode a rate limit; let a backend bench itself.
+- **Failover stops the moment a turn is committed.** Once a backend has streamed
+  a word or started a tool, switching would duplicate the draft in `store/chat`
+  and re-run SQLite mutations. `runPoolTurn` watches `onToolStart`, not
+  `onToolEnd` — a tool that failed halfway has still had its chance to write.
+- **Health is persisted** (AsyncStorage), because a background sweep would
+  otherwise walk straight back into a backend that is out of quota for the day.
+  Keys stay in SecureStore; `pool.ts` holds only timings and counters.
+- Streaming tool calls arrive as `function.arguments` **fragments keyed by
+  index**. A half-streamed argument string is not valid JSON, so they can only be
+  assembled once the stream ends.
 
 ## The two self-modification layers
 
@@ -95,8 +120,15 @@ There is no device-free way to exercise SQLite or notifications, but a lot is
 testable off-device and worth checking when touched:
 
 - Pure logic (`htmlToText`, `sanitizeEvents`, `diffText`, date helpers, the rule
-  validator and engine, fragment validation, schema conversion) runs in plain
-  Node via esbuild, stubbing `react-native` and the `expo-*` modules.
+  validator and engine, fragment validation, schema conversion, the pool's
+  rotation and backoff, `mergePoolMembers`) runs in plain Node via esbuild,
+  stubbing `react-native` and the `expo-*` modules. Stub `expo-*` with a CJS
+  `Proxy` so named imports resolve without listing every export.
+- **The SSE clients are testable with a fake `XMLHttpRequest`** that grows
+  `responseText` and fires `onprogress`, which is exactly what React Native does.
+  Worth doing after any change to frame parsing: the cases that actually break
+  are a chunk boundary landing mid-`data:` line, a final frame with no trailing
+  newline, and tool arguments split across frames.
 - The SQL — including the migration chain — runs against Node 24's built-in
   `node:sqlite`. Extract the DDL from `MIGRATIONS` and apply it in order.
 - **The module sandbox is verifiable in a real browser**: render

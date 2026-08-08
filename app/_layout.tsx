@@ -10,7 +10,9 @@ import { Text } from '../src/components/ui';
 import * as background from '../src/lib/background';
 import { getDb } from '../src/lib/db';
 import { syncAllRoutineSchedules } from '../src/lib/engine/routines';
+import { setAnthropicUsageRecorder } from '../src/lib/anthropic/client';
 import { setUsageRecorder } from '../src/lib/gemini/client';
+import { setOpenAiUsageRecorder } from '../src/lib/openai/client';
 import * as notify from '../src/lib/notify';
 import { recordUsage } from '../src/lib/usage';
 import { errorMessage } from '../src/lib/util';
@@ -22,7 +24,11 @@ import { ThemeProvider, useTheme } from '../src/theme';
 // start, including the headless one the OS uses to wake the app.
 background.defineBackgroundTask();
 notify.installNotificationHandler();
+// Every provider feeds the one ledger, so Settings shows a single total no
+// matter who answered.
 setUsageRecorder(recordUsage);
+setAnthropicUsageRecorder(recordUsage);
+setOpenAiUsageRecorder(recordUsage);
 
 function Splash({ error }: { error?: string | null }) {
   const t = useTheme();

@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Scout",
+    "name": "Scout private 1.5",
     "slug": "scout",
-    "version": "1.0.0",
+    "version": "1.5.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "scout",
@@ -33,7 +33,9 @@
         "WAKE_LOCK",
         "READ_CALENDAR",
         "WRITE_CALENDAR",
-        "VIBRATE"
+        "VIBRATE",
+        "android.permission.READ_CALENDAR",
+        "android.permission.WRITE_CALENDAR"
       ]
     },
     "web": {
@@ -66,6 +68,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "25822918-25ac-4b48-b278-36dced4a4b36"
+      }
     }
   }
 }

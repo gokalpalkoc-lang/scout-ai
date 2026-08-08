@@ -1,8 +1,8 @@
 import { Settings } from '../../store/settings';
 import { AgentCallbacks, AgentResult } from '../ai/contract';
+import { assistantSystemPrompt } from '../ai/prompt';
 import { ChatMessage, GroundingRef, ToolTrailEntry } from '../types';
 import { errorMessage, truncate } from '../util';
-import { nowContextLine } from '../util/date';
 import { Credential } from './auth';
 import { GeminiError, generateContent, streamGenerateContent } from './client';
 import { TOOL_DECLARATIONS, ToolContext, runTool } from './tools';
@@ -26,34 +26,6 @@ import {
  */
 
 const MAX_TOOL_ROUNDS = 6;
-
-function systemPrompt(settings: Settings, siteCount: number): string {
-  return [
-    'You are Scout, a personal assistant living inside a mobile app. Your speciality is watching',
-    'websites for events and keeping the user ahead of dates and deadlines, but you help with',
-    'ordinary questions and routine tasks too.',
-    '',
-    `Context: it is ${nowContextLine()}. The user currently watches ${siteCount} website(s).`,
-    '',
-    'How to work:',
-    '- Prefer acting over asking. If the user says "watch this page" or "check my sites", use the tools.',
-    '- Never claim you checked, saved, scheduled or added something unless a tool call actually did it.',
-    '- Use search_events before answering questions about what is coming up; do not answer from memory.',
-    '- When you need a page\'s contents, call read_url or scan_url_for_events. You cannot browse otherwise.',
-    '- Ask for a URL when the user names a site you do not have. Do not guess at addresses.',
-    '- Confirm before anything destructive: removing a watched site, dismissing many events, deleting routines.',
-    '',
-    'How to write:',
-    '- Mobile screen. Short paragraphs, no preamble, no restating the question.',
-    '- Lead with the answer. Use "- " bullets for lists of events, with the date first.',
-    '- Bold sparingly with **, for names and dates. No tables, no headings above ###.',
-    '- Be specific about dates: "Sat 14 Sep, 20:30", not "next Saturday".',
-    '- If a tool failed, say plainly what failed and what the user can do about it.',
-    settings.webGrounding
-      ? '- Google Search is available for general questions. Prefer the app\'s own tools for anything about the user\'s sites or events.'
-      : '- You have no web search. Use read_url for specific pages, and say so if you cannot verify something.',
-  ].join('\n');
-}
 
 /** Chat history → Gemini `contents`, dropping errored turns. */
 export function historyToContents(messages: ChatMessage[], maxTurns = 24): Content[] {
@@ -110,7 +82,17 @@ export async function runAgentTurn(args: AgentRunArgs): Promise<AgentResult> {
     if (args.signal?.aborted) break;
 
     const request: GenerateContentRequest = {
-      systemInstruction: { parts: [{ text: systemPrompt(settings, args.siteCount) }] },
+      systemInstruction: {
+        parts: [
+          {
+            text: assistantSystemPrompt({
+              siteCount: args.siteCount,
+              grounding: allowGrounding,
+              modules: true,
+            }),
+          },
+        ],
+      },
       contents,
       tools: allowGrounding ? [...tools, { googleSearch: {} }] : tools,
       generationConfig: {

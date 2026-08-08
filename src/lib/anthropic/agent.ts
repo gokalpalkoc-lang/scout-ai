@@ -1,9 +1,9 @@
 import { Settings } from '../../store/settings';
 import { AgentCallbacks, AgentResult } from '../ai/contract';
+import { assistantSystemPrompt } from '../ai/prompt';
 import { TOOL_DECLARATIONS, ToolContext, runTool } from '../gemini/tools';
 import { ChatMessage, ToolTrailEntry } from '../types';
 import { errorMessage, truncate } from '../util';
-import { nowContextLine } from '../util/date';
 import { AnthropicCredential } from './auth';
 import { AnthropicError, createMessage, refusalMessage, streamMessage } from './client';
 import { toAnthropicTools } from './schema';
@@ -27,36 +27,6 @@ import {
  */
 
 const MAX_TOOL_ROUNDS = 8;
-
-function systemPrompt(siteCount: number, hasModules: boolean): string {
-  return [
-    'You are Scout, a personal assistant living inside a mobile app. Your speciality is watching',
-    'websites for events and keeping the user ahead of dates and deadlines, but you help with',
-    'ordinary questions and routine tasks too.',
-    '',
-    `Context: it is ${nowContextLine()}. The user currently watches ${siteCount} website(s).`,
-    '',
-    'How to work:',
-    '- Prefer acting over asking. If the user says "watch this page" or "check my sites", use the tools.',
-    '- Never claim you checked, saved, scheduled or added something unless a tool call actually did it.',
-    '- Use search_events before answering questions about what is coming up; do not answer from memory.',
-    '- When you need a page\'s contents, call read_url or scan_url_for_events. You cannot browse otherwise.',
-    '- Ask for a URL when the user names a site you do not have. Do not guess at addresses.',
-    '- Confirm before anything destructive: removing a watched site, dismissing many events, deleting routines.',
-    hasModules
-      ? '- The user can ask you to build a small tool or panel for the app; when they do, use create_module.'
-      : '',
-    '',
-    'How to write:',
-    '- Mobile screen. Short paragraphs, no preamble, no restating the question.',
-    '- Lead with the answer. Use "- " bullets for lists of events, with the date first.',
-    '- Be specific about dates: "Sat 14 Sep, 20:30", not "next Saturday".',
-    '- Keep responses brief. Most of the reply should be the answer, not caveats.',
-    '- If a tool failed, say plainly what failed and what the user can do about it.',
-  ]
-    .filter(Boolean)
-    .join('\n');
-}
 
 /** Chat history → Anthropic `messages`, dropping errored turns. */
 function historyToMessages(messages: ChatMessage[], maxTurns = 24): AnthropicMessage[] {
@@ -110,7 +80,12 @@ export async function runAnthropicTurn(args: AnthropicTurnArgs): Promise<AgentRe
     const request: MessagesRequest = {
       model: settings.claudeModel,
       max_tokens: settings.streamResponses ? 32_000 : 16_000,
-      system: systemPrompt(args.siteCount, true),
+      system: assistantSystemPrompt({
+        siteCount: args.siteCount,
+        // Claude has no Google Search grounding; read_url is the only way out.
+        grounding: false,
+        modules: true,
+      }),
       messages,
       tools,
       thinking: { type: 'adaptive' },

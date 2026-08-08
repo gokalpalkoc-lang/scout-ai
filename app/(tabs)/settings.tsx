@@ -405,6 +405,7 @@ export default function SettingsScreen() {
   }, [refreshAll]);
 
   const connected = settings.provider === 'aistudio' ? !!storedKey : !!vertexToken;
+  const enabledPoolCount = settings.poolMembers.filter((m) => m.enabled).length;
 
   return (
     <Screen scroll>
@@ -420,6 +421,7 @@ export default function SettingsScreen() {
           options={[
             { label: PROVIDER_LABELS.gemini, value: 'gemini' as const },
             { label: PROVIDER_LABELS.claude, value: 'claude' as const },
+            { label: PROVIDER_LABELS.pool, value: 'pool' as const },
           ]}
           value={settings.assistantProvider}
           onChange={(v) => {
@@ -431,9 +433,29 @@ export default function SettingsScreen() {
               );
               return;
             }
+            if (v === 'pool' && !enabledPoolCount) {
+              Alert.alert('The pool is empty', 'Add at least one free backend first.', [
+                { text: 'Not now', style: 'cancel' },
+                { text: 'Set up', onPress: () => router.push('/pool') },
+              ]);
+              return;
+            }
             settings.set('assistantProvider', v);
           }}
         />
+
+        <Card padded={false}>
+          <ListRow
+            title="Free model pool"
+            subtitle={
+              enabledPoolCount
+                ? `${enabledPoolCount} backend${enabledPoolCount === 1 ? '' : 's'} in rotation`
+                : 'Groq, Cerebras, OpenRouter, Mistral, GitHub Models — all free'
+            }
+            icon="flash-outline"
+            onPress={() => router.push('/pool')}
+          />
+        </Card>
 
         <Card>
           <Row gap={t.spacing.md} align="flex-start">

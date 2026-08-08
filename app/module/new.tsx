@@ -5,6 +5,7 @@ import { Alert, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Badge, Button, Card, Field, Header, Row, Text } from '../../src/components/ui';
+import { PROVIDER_LABELS } from '../../src/lib/ai/contract';
 import { createModule } from '../../src/lib/db/modules';
 import { generateModule } from '../../src/lib/modules/generate';
 import { CAPABILITY_LABELS, Capability } from '../../src/lib/modules/types';
@@ -68,7 +69,7 @@ export default function NewModuleScreen() {
     }
   }, [request, settings, refreshModules]);
 
-  const providerLabel = settings.assistantProvider === 'claude' ? 'Claude' : 'Gemini';
+  const providerLabel = PROVIDER_LABELS[settings.assistantProvider];
 
   return (
     <View style={{ flex: 1, backgroundColor: t.color.bg, paddingTop: insets.top }}>
@@ -87,6 +88,9 @@ export default function NewModuleScreen() {
           <Text variant="body" tone="secondary">
             {providerLabel} writes a small panel and Scout runs it inside the app. It becomes part of
             your Studio and you can revise it later.
+            {settings.assistantProvider === 'pool'
+              ? ' The free pool is better at rules than at code — switch to Claude or Gemini if a panel comes out wrong.'
+              : ''}
           </Text>
         </View>
 

@@ -1,10 +1,7 @@
 import { Settings } from '../../store/settings';
-import { claudeAsk } from '../anthropic/agent';
-import { resolveAnthropicCredential } from '../anthropic/auth';
-import { quickAsk } from '../gemini/agent';
-import { resolveCredential } from '../gemini/auth';
+import { askOnce } from '../ai/ask';
 import { Source } from '../types';
-import { errorMessage, truncate } from '../util';
+import { truncate } from '../util';
 import { RULE_LANGUAGE_REFERENCE, parseRule } from './parse';
 import { RuleBody } from './types';
 
@@ -75,37 +72,17 @@ export async function generateRule(
 ): Promise<{ ok: true; rule: GeneratedRule } | { ok: false; error: string; problems?: string[] }> {
   const prompt = buildPrompt(args);
 
-  let text: string;
-  try {
-    if (args.settings.assistantProvider === 'claude') {
-      const resolved = await resolveAnthropicCredential();
-      if ('error' in resolved) return { ok: false, error: resolved.error };
-      text = await claudeAsk({
-        credential: resolved.credential,
-        model: args.settings.claudeModel,
-        system: SYSTEM,
-        prompt,
-        maxTokens: 4_000,
-        effort: 'medium',
-        signal: args.signal,
-      });
-    } else {
-      const resolved = await resolveCredential(args.settings);
-      if ('error' in resolved) return { ok: false, error: resolved.error };
-      text = await quickAsk({
-        credential: resolved.credential,
-        model: args.settings.chatModel,
-        system: SYSTEM,
-        prompt,
-        maxOutputTokens: 4_000,
-        signal: args.signal,
-      });
-    }
-  } catch (e) {
-    return { ok: false, error: errorMessage(e) };
-  }
+  const asked = await askOnce({
+    settings: args.settings,
+    system: SYSTEM,
+    prompt,
+    maxTokens: 4_000,
+    effort: 'medium',
+    signal: args.signal,
+  });
+  if (!asked.ok) return { ok: false, error: asked.error };
 
-  const raw = extractJson(text);
+  const raw = extractJson(asked.text);
   if (!raw || typeof raw !== 'object') {
     return { ok: false, error: 'The model did not return a usable rule.' };
   }

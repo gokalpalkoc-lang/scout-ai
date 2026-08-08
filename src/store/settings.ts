@@ -2,7 +2,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import { AssistantProvider } from '../lib/ai/contract';
+import {
+  AssistantProvider,
+  PoolMember,
+  defaultPoolMembers,
+  mergePoolMembers,
+} from '../lib/ai/contract';
 import { AnthropicModelInfo } from '../lib/anthropic/types';
 import { ProviderId } from '../lib/gemini/auth';
 import { ModelInfo } from '../lib/gemini/types';
@@ -20,6 +25,14 @@ export interface Settings {
   knownClaudeModels: AnthropicModelInfo[];
   claudeModelsFetchedAt: number | null;
   claudeVerifiedAt: number | null;
+
+  // -------------------------------------------------------- free model pool
+  /**
+   * Every backend Scout can rotate through, enabled or not. Keys live in
+   * SecureStore and rate-limit state in `src/lib/ai/pool.ts`; this holds only
+   * the user's choices.
+   */
+  poolMembers: PoolMember[];
 
   // ------------------------------------------------------------ Gemini access
   provider: ProviderId;
@@ -76,6 +89,8 @@ export const DEFAULT_SETTINGS: Settings = {
   claudeModelsFetchedAt: null,
   claudeVerifiedAt: null,
 
+  poolMembers: defaultPoolMembers(),
+
   provider: 'aistudio',
   vertexProject: '',
   vertexLocation: 'us-central1',
@@ -122,7 +137,9 @@ export const useSettings = create<SettingsState>()(
       hydrated: false,
       set: (key, value) => set({ [key]: value } as Partial<SettingsState>),
       patch: (patch) => set(patch as Partial<SettingsState>),
-      reset: () => set({ ...DEFAULT_SETTINGS }),
+      // Fresh member objects, or a reset would hand back the array the previous
+      // session had already been editing.
+      reset: () => set({ ...DEFAULT_SETTINGS, poolMembers: defaultPoolMembers() }),
     }),
     {
       name: STORAGE_KEY,
@@ -130,6 +147,12 @@ export const useSettings = create<SettingsState>()(
       // `hydrated` is runtime-only; everything else round-trips.
       partialize: ({ hydrated: _hydrated, set: _set, patch: _patch, reset: _reset, ...rest }) =>
         rest as Settings,
+      // A release that adds a backend to the catalog must not leave the saved
+      // pool one row short, so the list is reconciled on the way in.
+      merge: (persisted, current) => {
+        const saved = (persisted ?? {}) as Partial<Settings>;
+        return { ...current, ...saved, poolMembers: mergePoolMembers(saved.poolMembers) };
+      },
       onRehydrateStorage: () => () => {
         useSettings.setState({ hydrated: true });
       },
@@ -153,7 +176,8 @@ export async function readSettings(): Promise<Settings> {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_SETTINGS };
     const parsed = JSON.parse(raw) as { state?: Partial<Settings> };
-    return { ...DEFAULT_SETTINGS, ...(parsed.state ?? {}) };
+    const state = parsed.state ?? {};
+    return { ...DEFAULT_SETTINGS, ...state, poolMembers: mergePoolMembers(state.poolMembers) };
   } catch {
     return { ...DEFAULT_SETTINGS };
   }

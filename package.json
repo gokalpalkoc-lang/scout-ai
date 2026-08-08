@@ -1,6 +1,6 @@
 {
-  "name": "scout",
-  "version": "1.0.0",
+  "name": "scout-private-version",
+  "version": "1.5.0",
   "main": "expo-router/entry",
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
