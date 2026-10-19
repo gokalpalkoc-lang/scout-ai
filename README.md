@@ -103,11 +103,9 @@ core watching feature. Use it as a fast design loop, not as a functional test.
 
 ### 2. Android emulator — tests everything
 
-The SDK is already at `~/Android/Sdk` and `/dev/kvm` is accessible, so hardware
-acceleration will work. What's missing is a virtual device: there are no AVDs and
-no system image yet.
-
-Create one in Android Studio (it downloads the image for you):
+You need the Android SDK (installed with Android Studio, at `~/Android/Sdk` by
+default) and a virtual device. Create one in Android Studio (it downloads the
+image for you):
 
 > **Tools → Device Manager → Add a new device**, pick any Pixel with API 34+, and
 > let it download the system image (~1.5 GB).
@@ -120,7 +118,7 @@ npm run android:emulator  # boots it and installs Expo Go
 ```
 
 `android:emulator` sets `ANDROID_HOME` and puts `adb`/`emulator` on `PATH` for
-you — neither is configured globally on this machine.
+you, so neither needs to be configured globally.
 
 Everything works there except **background wakes**, which Expo Go cannot do. For
 those, make a development build:
@@ -129,8 +127,8 @@ those, make a development build:
 npx expo run:android      # needs the Android SDK + a JDK on PATH
 ```
 
-Android Studio ships a usable JDK at `/opt/android-studio/jbr` if you need one:
-`export JAVA_HOME=/opt/android-studio/jbr`.
+Android Studio ships a usable JDK in its `jbr/` folder if you need one; point
+`JAVA_HOME` at it.
 
 ### 3. Your own phone — the real thing
 

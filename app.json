@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Scout private 1.5",
+    "name": "Scout",
     "slug": "scout",
     "version": "1.5.0",
     "orientation": "portrait",
@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.orge.scout",
+      "bundleIdentifier": "io.github.gokalpalkoc.scout",
       "infoPlist": {
         "UIBackgroundModes": [
           "fetch",
@@ -18,7 +18,7 @@
       }
     },
     "android": {
-      "package": "com.orge.scout",
+      "package": "io.github.gokalpalkoc.scout",
       "adaptiveIcon": {
         "backgroundColor": "#0B1220",
         "foregroundImage": "./assets/android-icon-foreground.png",
